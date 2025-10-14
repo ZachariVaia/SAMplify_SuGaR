@@ -1,0 +1,3 @@
+[submodule "SUGAR/SuGaR"]
+	path = SUGAR/SuGaR
+	url = https://github.com/Anttwo/SuGaR
