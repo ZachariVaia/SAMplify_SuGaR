@@ -99,17 +99,17 @@ sudo chown -R "$USER:$USER" "$IN" "$OUT"
 chmod -R u+rwX "$IN" "$OUT"
 mkdir -p "$IN/$DATASET_NAME" "$OUT"
 
-# docker run --rm -it --gpus all \
-#   --user "$(id -u):$(id -g)" \
-#   -v "$PWD:/workspace" \
-#   -v "$PWD/data/input:/data/in" \
-#   -v "$PWD/data/output:/data/out" \
-#   -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix \
-#   -e INPUT="/data/in/$DATASET_NAME" \
-#   -e OUT="/data/out" \
-#   -e GUI=1 -e FRAME_IDX=0 -e OBJ_ID=1 \
-#   sam2:local \
-#   bash -lc 'python3 /workspace/app/video_predict.py'
+docker run --rm -it --gpus all \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD:/workspace" \
+  -v "$PWD/data/input:/data/in" \
+  -v "$PWD/data/output:/data/out" \
+  -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -e INPUT="/data/in/$DATASET_NAME" \
+  -e OUT="/data/out" \
+  -e GUI=1 -e FRAME_IDX=0 -e OBJ_ID=1 \
+  sam2:local \
+  bash -lc 'python3 /workspace/app/video_predict.py'
 
 echo "[*] SAM2 finished successfully (until here)."
 docker pull colmap/colmap
@@ -124,14 +124,14 @@ cd "$COLMAP_OUT_PATH"
  
 sudo chown -R "$USER:$USER" "$COLMAP_OUT_PATH/input"
 chmod -R u+rwX,g+rwX "$COLMAP_OUT_PATH/input"
-# αν υπάρχει το $DATASET_NAME αλλά όχι ο γονικός με δικαιώματα:
+
 sudo install -d -m 775 -o "$USER" -g "$USER" \
   "$COLMAP_OUT_PATH/input/$DATASET_NAME" \
   "$COLMAP_OUT_PATH/input/${DATASET_NAME}_indexed"
  
 # ---- paths ----
 IMAGES_SRC="$SAM2_PATH/data/input/${DATASET_NAME}"
-MASKS_SRC="$SAM2_PATH/data/output/${DATASET_NAME}_indexed"   # <-- αν είναι *_indexed_masked, άλλαξέ το
+MASKS_SRC="$SAM2_PATH/data/output/${DATASET_NAME}_indexed"   
 IMAGES_DST="$COLMAP_OUT_PATH/input/${DATASET_NAME}"
 MASKS_DST="$COLMAP_OUT_PATH/input/${DATASET_NAME}_indexed"
 OUT_DST="$COLMAP_OUT_PATH/output/${DATASET_NAME}"
@@ -152,11 +152,11 @@ echo "Copied images: $(find "$IMAGES_DST" -maxdepth 1 -type f | wc -l)"
 echo "Copied masks : $(find "$MASKS_DST" -maxdepth 1 -type f | wc -l)"
 
 # ---- run COLMAP ----
-# bash "$COLMAP_OUT_PATH/run_colmap.sh" \
-#   "$IMAGES_DST" \
-#   "$MASKS_DST" \
-#   "$OUT_DST" \
-#   exhaustive
+bash "$COLMAP_OUT_PATH/run_colmap.sh" \
+  "$IMAGES_DST" \
+  "$MASKS_DST" \
+  "$OUT_DST" \
+  exhaustive
 
 
 
@@ -173,7 +173,7 @@ if [ -f "$SAMplify_SuGaR_PATH/Dockerfile_final" ]; then
   echo "[*] Copying Dockerfile to $SUGAR_PATH"
   cp -f "$SAMplify_SuGaR_PATH/Dockerfile_final" "$SUGAR_PATH"
   cp -f "$SAMplify_SuGaR_PATH/train.py" "$SUGAR_PATH/gaussian_splatting/"
-  # cp -f "$SAMplify_SuGaR_PATH/coarse_mesh.py" "$SUGAR_PATH/sugar_extractors/coarse_mesh.py"
+ 
 else
   echo "[*] Dockerfile not found in $SAMplify_SuGaR_PATH (skipping copy)"
   echo "[*] train.py not found in $SAMplify_SuGaR_PATH (skipping copy)"
