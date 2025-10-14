@@ -84,7 +84,7 @@ Once the paths are set, you can run the pipeline with the following command:
 
 ```bash
 cd ..
-bash ./run_pipeline.sh your_dataset_name
+bash run_pipeline.sh your_dataset_name
 ```
 
 This will execute the **SAM2** and **SuGaR** pipelines for the specified dataset.
