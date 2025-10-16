@@ -203,17 +203,18 @@ While standard 3DGS optimizes unstructured volumetric Gaussians, SuGaR adds geom
 ---
 
 ### Core Concept
-Each Gaussian splat \( G_i \) is defined by its center \( \mu_i \), covariance \( \Sigma_i \), color \( c_i \), and opacity \( \alpha_i \):
 
-\[
-G_i(x) = \alpha_i \exp \left( -\frac{1}{2}(x - \mu_i)^{T} \Sigma_i^{-1} (x - \mu_i) \right)
-\]
+Each Gaussian splat Gi is defined by its:
+- Center **μᵢ**
+- Covariance **Σᵢ**
+- Color **cᵢ**
+- Opacity **αᵢ**
 
-The total density field is:
+Formula:
+**Gᵢ(x) = αᵢ · exp[ -½ (x − μᵢ)ᵀ Σᵢ⁻¹ (x − μᵢ) ]**
 
-\[
-\rho(x) = \sum_i G_i(x)
-\]
+Total density field:
+**ρ(x) = Σ Gᵢ(x)**
 
 SuGaR introduces a **surface-alignment regularization** that encourages:
 - The smallest Gaussian eigenvector to align with the **local surface normal**
