@@ -38,10 +38,10 @@ def extract_mesh_from_coarse_sugar(args):
     use_fast_method = True  # TODO: Was False before, but True seems better
 
     # Mesh computation parameters
-    fg_bbox_factor = 1.  # 1.
+    fg_bbox_factor = 0.7  # 1.
     bg_bbox_factor = 0.  # 4.
     poisson_depth = 6  # 10 for most real scenes. 6 or 7 work well for most synthetic scenes
-    vertices_density_quantile = 0.1  # 0.1 for most real scenes. 0. works well for most synthetic scenes
+    vertices_density_quantile = 0.  # 0.1 for most real scenes. 0. works well for most synthetic scenes
     decimate_mesh = True
     clean_mesh = True
     project_mesh_on_surface_points = args.project_mesh_on_surface_points
@@ -76,31 +76,6 @@ def extract_mesh_from_coarse_sugar(args):
     mesh_output_dir = args.mesh_output_dir
     os.makedirs(mesh_output_dir, exist_ok=True)
             
-    # # Bounding box
-    # if (args.bboxmin is None) or (args.bboxmin == 'None'):
-    #     use_custom_bbox = False
-    # else:
-    #     if (args.bboxmax is None) or (args.bboxmax == 'None'):
-    #         raise ValueError("You need to specify both bboxmin and bboxmax.")
-    #     use_custom_bbox = True
-        
-    #     # Parse bboxmin
-    #     if args.bboxmin[0] == '(':
-    #         args.bboxmin = args.bboxmin[1:]
-    #     if args.bboxmin[-1] == ')':
-    #         args.bboxmin = args.bboxmin[:-1]
-    #     args.bboxmin = tuple([float(x) for x in args.bboxmin.split(",")])
-        
-    #     # Parse bboxmax
-    #     if args.bboxmax[0] == '(':
-    #         args.bboxmax = args.bboxmax[1:]
-    #     if args.bboxmax[-1] == ')':
-    #         args.bboxmax = args.bboxmax[:-1]
-    #     args.bboxmax = tuple([float(x) for x in args.bboxmax.split(",")])
-        
-    #     fg_bbox_min = args.bboxmin
-    #     fg_bbox_max = args.bboxmax
-    # center_bbox = args.center_bbox
     # Bounding box
     if (args.bboxmin is None) or (args.bboxmin == 'None'):
         use_custom_bbox = False
@@ -109,39 +84,72 @@ def extract_mesh_from_coarse_sugar(args):
             raise ValueError("You need to specify both bboxmin and bboxmax.")
         use_custom_bbox = True
 
-        # Parse bboxmin and bboxmax manually if provided
-        if args.bboxmin[0] == '(':
-            args.bboxmin = args.bboxmin[1:]
-        if args.bboxmin[-1] == ')':
-            args.bboxmin = args.bboxmin[:-1]
-        args.bboxmin = tuple([float(x) for x in args.bboxmin.split(",")])
+        def _parse_box(v):
+            if isinstance(v, (tuple, list)) and len(v) == 3:
+                return tuple(float(x) for x in v)
+            s = str(v).strip()
+            if s[0] == '(': s = s[1:]
+            if s[-1] == ')': s = s[:-1]
+            return tuple(float(x) for x in s.split(','))
 
-        if args.bboxmax[0] == '(':
-            args.bboxmax = args.bboxmax[1:]
-        if args.bboxmax[-1] == ')':
-            args.bboxmax = args.bboxmax[:-1]
-        args.bboxmax = tuple([float(x) for x in args.bboxmax.split(",")])
+        fg_bbox_min = _parse_box(args.bboxmin)
+        fg_bbox_max = _parse_box(args.bboxmax)
 
-        fg_bbox_min = args.bboxmin
-        fg_bbox_max = args.bboxmax
-
-    # Calculate the bounding box based on the Gaussian points if custom bbox is not used
+    # 2) Αν ΔΕΝ δώσαμε custom bbox, φτιάχνουμε «σφιχτό» κύβο γύρω από τις κάμερες
     if not use_custom_bbox:
-        # Extract the Gaussian points
-        gaussian_points = nerfmodel.gaussians.get_xyz.detach().float().cuda()
+        ext, center = sugar.get_cameras_spatial_extent(return_average_xyz=True)  # ext: scalar tensor, center: (3,)
+        fg_bbox_factor = 0.70           # πιο σφιχτό, κόβει πάτωμα/λωρίδες
+        half = fg_bbox_factor * ext     # scalar
+        fg_bbox_min_tensor = (center - half).view(1, 3)
+        fg_bbox_max_tensor = (center + half).view(1, 3)
+    else:
+        fg_bbox_min_tensor = torch.tensor(fg_bbox_min, device=sugar.device).view(1, 3)
+        fg_bbox_max_tensor = torch.tensor(fg_bbox_max, device=sugar.device).view(1, 3)
 
-        # Calculate the min and max values for the bounding box based on the Gaussian points
-        fg_bbox_min = gaussian_points.min(dim=0)[0].cpu().numpy()  # min along each axis (x, y, z)
-        fg_bbox_max = gaussian_points.max(dim=0)[0].cpu().numpy()  # max along each axis (x, y, z)
+    center_bbox = False     
+   
+    # # Bounding box
+    # if (args.bboxmin is None) or (args.bboxmin == 'None'):
+    #     use_custom_bbox = False
+    # else:
+    #     if (args.bboxmax is None) or (args.bboxmax == 'None'):
+    #         raise ValueError("You need to specify both bboxmin and bboxmax.")
+    #     use_custom_bbox = True
 
-        # Convert to tensors for further processing
-        fg_bbox_min_tensor = torch.tensor(fg_bbox_min).to(sugar.device)
-        fg_bbox_max_tensor = torch.tensor(fg_bbox_max).to(sugar.device)
+    #     # Parse bboxmin and bboxmax manually if provided
+    #     if args.bboxmin[0] == '(':
+    #         args.bboxmin = args.bboxmin[1:]
+    #     if args.bboxmin[-1] == ')':
+    #         args.bboxmin = args.bboxmin[:-1]
+    #     args.bboxmin = tuple([float(x) for x in args.bboxmin.split(",")])
 
-        # Optional: Print the computed bounding box for confirmation
-        print(f"Bounding box computed from Gaussians: min = {fg_bbox_min}, max = {fg_bbox_max}")
+    #     if args.bboxmax[0] == '(':
+    #         args.bboxmax = args.bboxmax[1:]
+    #     if args.bboxmax[-1] == ')':
+    #         args.bboxmax = args.bboxmax[:-1]
+    #     args.bboxmax = tuple([float(x) for x in args.bboxmax.split(",")])
 
-    center_bbox = args.center_bbox  # Keep this option to center the bounding box, if desired
+    #     fg_bbox_min = args.bboxmin
+    #     fg_bbox_max = args.bboxmax
+
+    # # Calculate the bounding box based on the Gaussian points if custom bbox is not used
+    # if not use_custom_bbox:
+    #     # Extract the Gaussian points
+    #     gaussian_points = nerfmodel.gaussians.get_xyz.detach().float().cuda()
+
+    #     # Calculate the min and max values for the bounding box based on the Gaussian points
+    #     fg_bbox_min = gaussian_points.min(dim=0)[0].cpu().numpy()  # min along each axis (x, y, z)
+    #     fg_bbox_max = gaussian_points.max(dim=0)[0].cpu().numpy()  # max along each axis (x, y, z)
+
+    #     # Convert to tensors for further processing
+    #     fg_bbox_min_tensor = torch.tensor(fg_bbox_min).to(sugar.device)
+    #     fg_bbox_max_tensor = torch.tensor(fg_bbox_max).to(sugar.device)
+
+    #     # Optional: Print the computed bounding box for confirmation
+    #     print(f"Bounding box computed from Gaussians: min = {fg_bbox_min}, max = {fg_bbox_max}")
+
+    # center_bbox = args.center_bbox  # Keep this option to center the bounding box, if desired
+
 
         
     use_centers_to_extract_mesh = args.use_centers_to_extract_mesh
