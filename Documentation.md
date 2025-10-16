@@ -19,15 +19,14 @@ This document describes architecture, data flow, installation, configuration, us
    - Docker + GPU setup
 5. Configuration & Environment
 6. Pipeline Workflow (detailed)
-7. Commands & Examples
-8. Implementation Details
+7. Implementation Details
    - SAM2: annotation and mask generation
    - SuGaR: pointcloud, splats, and surface extraction
-9. Performance & Tuning
-10. Troubleshooting
-11. Limitations and Known Issues
-12. Roadmap & Future Work
-13. References
+8. Performance & Tuning
+9. Troubleshooting
+10. Limitations and Known Issues
+11. Roadmap & Future Work
+12. References
 
 ---
 
@@ -38,7 +37,6 @@ This document describes architecture, data flow, installation, configuration, us
 - [Data Formats & Layout](#data-formats-and-directory-layout)
 - [Installation](#installation)
 - [Pipeline Workflow](#pipeline-workflow-detailed)
-- [Commands & Examples](#commands--examples)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -278,7 +276,7 @@ These terms ensure that each Gaussian is **oriented and positioned** coherently 
 
 
 
-## 9. Performance & Tuning
+## 8. Performance & Tuning
 
 Tips to balance quality vs resource usage:
 - Image resolution: reduce resolution when memory is constrained. Try 720p if 1080p is too large.
@@ -289,7 +287,7 @@ Tips to balance quality vs resource usage:
 
 ---
 
-## 10. Troubleshooting
+## 9. Troubleshooting
 
 Problem: GPU not visible in container
 - Verify host has drivers: run `nvidia-smi` on host.
@@ -311,7 +309,7 @@ Problem: Output mesh has holes or disconnected components
 
 ---
 
-## 11. Limitations and Known Issues
+## 10. Limitations and Known Issues
 
 - Single-view reconstruction is inherently ambiguous; multi-view data yields significantly better results.
 - Very complex backgrounds or low contrast between object and background reduces mask accuracy.
@@ -320,7 +318,7 @@ Problem: Output mesh has holes or disconnected components
 
 ---
 
-## 12. Roadmap & Future Work
+## 11. Roadmap & Future Work
 
 Planned improvements:
 - Semi-automated point suggestion: use object detectors to propose initial positive/negative points.
@@ -330,7 +328,7 @@ Planned improvements:
 
 ---
 
-## 13. References
+## 12. References
 
 - SAM projects and interactive segmentation literature.
 - Gaussian splatting and surface reconstruction (Poisson, Marching Cubes).
