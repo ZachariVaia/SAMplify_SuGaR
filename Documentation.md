@@ -140,122 +140,143 @@ If using GUI-based SAM2 UIs, ensure X11 socket and DISPLAY forwarded and that ho
 
 Set environment variables used by scripts/wrappers:
 
-- SAM_FIT_SUGAR_PATH — path to the project root (absolute).
-- DATASET — default dataset name to run on.
-- DOCKER_IMAGE_SAM2 — (optional) override SAM2 docker image tag.
-- DOCKER_IMAGE_SUGAR — (optional) override SuGaR docker image tag.
+- SAMPLIFY_SUGAR_PATH — path to the project root (absolute).
+
 
 Example:
 
 ```bash
 export SAM_FIT_SUGAR_PATH="/home/you/SAMplify_SuGaR"
-export DATASET="my_dataset"
-export DOCKER_IMAGE_SAM2="peasant98/sam2:cuda-12.1"
-export DOCKER_IMAGE_SUGAR="ant_two/sugar:latest"
+
 ```
 
 ---
 
 ## 6. Pipeline Workflow (detailed)
 
-1. Prepare dataset: place images under data/datasets/<dataset_name>/.
-2. Preprocess images (optional): resizing, color normalization, or lens correction.
-3. Annotate using SAM2 UI (interactive): add positive and negative points. Save masks to results/<dataset>/masks/.
+1. **Prepare dataset:** place images under data/datasets/<dataset_name>/.
+2. **Preprocess images (optional):** resizing, color normalization, or lens correction.
+3. **Annotate using SAM2 UI (interactive):** add positive and negative points. Save masks to results/<dataset>/masks/.
    - Positive points: indicate foreground (object).
    - Negative points: indicate background/holes.
-4. Convert masks to sampled pointclouds.
-   - Single-view basic approach: backproject silhouette to approximate depth surface.
+4. **Convert masks to sampled pointclouds using SFM.**
    - Recommended for accurate geometry: use calibrated multi-view images and triangulate mask outlines or dense stereo.
-5. Run SuGaR reconstruction: create Gaussian splats per sample, aggregate, then extract surface.
-6. Postprocess mesh: smoothing, decimation, normal recomputation, and optional texture baking.
+5. **Run SuGaR reconstruction:** create Gaussian splats per sample, aggregate, then extract surface.
+6. **Postprocess mesh:** smoothing, decimation, normal recomputation, and optional texture baking.
 
 ---
-
-## 7. Commands & Examples
-
-### Run SAM2 (Docker) — interactive annotation
-
-```bash
-# mount project and X socket, run SAM2 docker image
-docker run -it \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  -v $SAM_FIT_SUGAR_PATH/data:/workspace/data \
-  -v $SAM_FIT_SUGAR_PATH/results:/workspace/results \
-  -e DISPLAY=$DISPLAY \
-  --gpus all \
-  ${DOCKER_IMAGE_SAM2:-peasant98/sam2:cuda-12.1} bash
-# inside container run SAM2 UI pointing to /workspace/data/datasets/<dataset>/images
-```
-
-When GUI appears, annotate images and save masks to /workspace/results/<dataset>/masks/.
-
-### Convert masks to pointcloud (example script)
-
-```bash
-python scripts/convert_masks_to_pointcloud.py \
-  --masks results/$DATASET/masks \
-  --out results/$DATASET/pointclouds \
-  --sampling 1.0
-```
-
-Options:
-- --sampling: pixel subsampling factor (1.0 = every pixel; 2.0 = every 2nd pixel, etc.).
-
-### Run SuGaR reconstruction (Docker)
-
-```bash
-docker run -it \
-  -v $SAM_FIT_SUGAR_PATH/data:/workspace/data \
-  -v $SAM_FIT_SUGAR_PATH/results:/workspace/results \
-  --gpus all \
-  ${DOCKER_IMAGE_SUGAR:-ant_two/sugar:latest} bash
-# inside container
-python sugar_reconstruct.py --input results/$DATASET/pointclouds --out results/$DATASET/meshes --poisson-depth 10
-```
-
-Key SuGaR reconstruction parameters:
-- poisson-depth: controls Poisson reconstruction resolution (higher = more detail, more memory).
-- splat-radius: initial radius of Gaussian splats.
-- splat-density-threshold: threshold when extracting surface from density field.
-
----
-
-## 8. Implementation Details
+## 7. Implementation Details
 
 ### SAM2: annotation and mask generation
 
-- Interaction: left-click = positive point (foreground), right-click = negative point (background). Each annotation is a (x, y) coordinate with label.
-- Seed-based region growing: SAM2 uses annotated seeds to initialize a foreground region. A flood-fill/region-growing algorithm expands the region using color/intensity similarity and edge cues.
-- Contour refinement: after initial region growth, boundary refinement (e.g., active contours or edge alignment) improves mask accuracy.
-- Output mask: binary HxW array saved as PNG or .npy (0 = background, 1 = foreground).
+- **Interaction:** left-click = positive point (foreground), right-click = negative point (background). Each annotation is a (x, y) coordinate with label.
+- **Seed-based region growing:** SAM2 uses annotated seeds to initialize a foreground region. A flood-fill/region-growing algorithm expands the region using color/intensity similarity and edge cues.
+- **Contour refinement:** after initial region growth, boundary refinement (e.g., active contours or edge alignment) improves mask accuracy.
+- **Output mask:** binary HxW array saved as PNG or .npy (0 = background, 1 = foreground).
 
 Additional notes on video / sequence workflows
 
-- SAM Video Prediction (mask propagation): when input is a video or ordered image sequence, use a propagation tool to automatically extend annotations across frames. Typical workflow:
+- **SAM Video Prediction (mask propagation):** when input is a video or ordered image sequence, use a propagation tool to automatically extend annotations across frames. Typical workflow:
   1. Annotate key frames (first frame or several keyframes).
   2. Run mask propagation to predict masks for intermediate frames.
   3. Inspect and correct poor predictions by adding corrective points and re-propagating if necessary.
   4. Save resulting masks into `results/<dataset>/video_masks/` as a time-ordered set of PNGs or .npy files.
 
-- Integration with 3D pipeline: per-frame masks from video propagation can be converted to per-frame point samples and then fused in SuGaR (temporal fusion or multi-view triangulation) to improve geometry stability and coverage.
+- **Integration with 3D pipeline:** per-frame masks from video propagation can be converted to per-frame point samples and then fused in SuGaR (temporal fusion or multi-view triangulation) to improve geometry stability and coverage.
 
 References and resources
 
-- Segment Anything Model (official): https://github.com/facebookresearch/segment-anything
-- Example community projects (search GitHub): "Video-SAM", "VideoSAM", "sam-video" — these provide mask propagation implementations and GUI wrappers for temporal annotation.
+- **Segment Anything Model (official):** https://github.com/facebookresearch/segment-anything
+- **Example community projects (search GitHub):** "Video-SAM", "VideoSAM", "sam-video" — these provide mask propagation implementations and GUI wrappers for temporal annotation.
+## SuGaR: Surface-Aligned Gaussian Splatting for Efficient 3D Mesh Reconstruction
 
-### SuGaR: Gaussian Splatting and Surface Extraction
-
-- For each 3D sample, create a Gaussian splat defined by position, covariance (or scalar radius), color, and weight.
-- Aggregate splats into a volumetric density field by evaluating contributions on a grid (or using an adaptive octree).
-- Extract an isosurface from the density field using Marching Cubes or convert aggregated splats to a point set and use Poisson Surface Reconstruction.
-- Post-extraction: clean small components, recompute normals, smooth, decimate.
-
-Performance considerations:
-- Splats per sample: large numbers of splats increase memory and compute; subsample if necessary.
-- Use GPU-accelerated kernels for splat rasterization and density aggregation where available.
+**Reference:**  
+Guédon & Lepetit, *"SuGaR: Surface-Aligned Gaussian Splatting for Efficient 3D Mesh Reconstruction and High-Quality Mesh Rendering"*, CVPR 2024.  
+[[Paper](https://openaccess.thecvf.com/content/CVPR2024/papers/Guedon_SuGaR_Surface-Aligned_Gaussian_Splatting_for_Efficient_3D_Mesh_Reconstruction_and_CVPR_2024_paper.pdf)] · [[GitHub](https://github.com/Anttwo/SuGaR)]
 
 ---
+
+### 📘 Overview
+SuGaR extends the **3D Gaussian Splatting (3DGS)** framework to enable **accurate and efficient surface reconstruction**.  
+While standard 3DGS optimizes unstructured volumetric Gaussians, SuGaR adds geometric priors to **align Gaussians with scene surfaces**, enabling high-fidelity **mesh extraction** and **hybrid mesh-Gaussian rendering**.
+
+---
+
+### 🧩 Core Concept
+Each Gaussian splat \( G_i \) is defined by its center \( \mu_i \), covariance \( \Sigma_i \), color \( c_i \), and opacity \( \alpha_i \):
+
+\[
+G_i(x) = \alpha_i \exp \left( -\frac{1}{2}(x - \mu_i)^T \Sigma_i^{-1} (x - \mu_i) \right)
+\]
+
+The **total density field** is:
+\[
+\rho(x) = \sum_i G_i(x)
+\]
+
+SuGaR introduces a **surface-alignment regularization** that encourages:
+- The smallest Gaussian eigenvector to align with the **local surface normal**
+- Gaussian centers to lie close to the **isosurface** of the density field
+
+This transforms the volumetric 3DGS representation into a **surface-aligned distribution** suitable for mesh extraction.
+
+---
+
+### ⚙️ Pipeline
+
+| Stage | Input | Output | Method |
+|:------|:------|:--------|:-------|
+| **1. Base 3DGS Training** | Multi-view images | Gaussian splats | Standard Gaussian Splatting |
+| **2. Surface Alignment** | Raw Gaussians | Surface-aligned splats | Alignment + Distance losses |
+| **3. Surface Sampling** | Aligned splats | Oriented point cloud | Isosurface sampling |
+| **4. Mesh Reconstruction** | Point cloud | Triangular mesh | Poisson Surface Reconstruction |
+| **5. Hybrid Refinement** | Mesh + Gaussians | Optimized hybrid model | Joint optimization |
+| **6. Post-Processing** | Mesh | Textured / smoothed mesh | Cleaning, decimation, UV mapping |
+
+---
+
+### 🧠 Loss Formulation
+The surface alignment objective combines **orientation** and **distance** consistency:
+
+\[
+\mathcal{L}_{surf} = \lambda_{align} \| (n_i^\top v_i)^2 - 1 \| + \lambda_{dist} \| d_i - \hat{d_i} \|
+\]
+
+Where:
+- \( n_i \): local surface normal  
+- \( v_i \): Gaussian principal direction  
+- \( d_i \): distance of Gaussian center to target surface  
+
+These terms ensure that each Gaussian is **oriented and positioned** coherently along the visible surfaces.
+
+---
+
+### 🎯 Advantages
+- ✅ **Fast mesh extraction:** Poisson reconstruction completes in minutes  
+- ✅ **High-quality geometry:** Smooth, watertight, and accurate surfaces  
+- ✅ **Hybrid representation:** Editable mesh + Gaussian rendering  
+- ✅ **Physically consistent normals and albedo**
+
+---
+
+### ⚠️ Limitations
+- Sensitive to sparse or thin structures  
+- Requires a pre-optimized 3DGS model  
+- Over-strong alignment regularization can cause surface flattening  
+
+---
+
+### ⏱️ Performance
+| Metric | Typical Value |
+|:-------|:--------------|
+| Fine-tuning iterations | ~7000 |
+| Mesh extraction time | 2–3 minutes |
+| Rendering cost | ≈ same as 3DGS |
+| Output size | Slightly higher (due to alignment terms) |
+
+---
+
+
 
 ## 9. Performance & Tuning
 
