@@ -167,12 +167,6 @@ export SAM_FIT_SUGAR_PATH="/home/you/SAMplify_SuGaR"
 
 ### SAM2: annotation and mask generation
 
-- **Interaction:** left-click = positive point (foreground), right-click = negative point (background). Each annotation is a (x, y) coordinate with label.
-- **Seed-based region growing:** SAM2 uses annotated seeds to initialize a foreground region. A flood-fill/region-growing algorithm expands the region using color/intensity similarity and edge cues.
-- **Contour refinement:** after initial region growth, boundary refinement (e.g., active contours or edge alignment) improves mask accuracy.
-- **Output mask:** binary HxW array saved as PNG or .npy (0 = background, 1 = foreground).
-
-Additional notes on video / sequence workflows
 
 - **SAM Video Prediction (mask propagation):** when input is a video or ordered image sequence, use a propagation tool to automatically extend annotations across frames. Typical workflow:
   1. Annotate key frames (first frame or several keyframes).
@@ -180,13 +174,34 @@ Additional notes on video / sequence workflows
   3. Inspect and correct poor predictions by adding corrective points and re-propagating if necessary.
   4. Save resulting masks into `results/<dataset>/video_masks/` as a time-ordered set of PNGs or .npy files.
 
+
+
+**Interaction & mask generation**  
+- Supported prompt types: **points**, **bounding boxes**, and **masks** on any selected frame.  
+- **Left-click** adds a *positive (foreground)* point, **right-click** a *negative (background)* one.  
+- After a prompt, SAM2 produces a **binary segmentation mask** for that frame (saved as `.png` or `.npy`).  
+- Internally, the model performs:
+  1. **Seed-based region growth:** expands the foreground region from annotated seeds using visual similarity and edge-aware refinement.  
+  2. **Contour refinement:** aligns mask boundaries with local gradients and object edges.  
+  3. **Memory encoding:** the resulting mask is stored in the temporal memory, linking it to the object ID and spatial context for future frames.
+
+
+**Video Propagation / Prediction**  
+When SAM2 is used for a video or image sequence, segmentation can be propagated automatically:
+
+1. **Initialization:**  
+   Annotate one or more *key frames* with points, boxes, or masks using  
+   ```python
+   frame_idx, obj_ids, masks = predictor.add_new_points_or_box(state, frame_idx, obj_id, points, labels)
+
 - **Integration with 3D pipeline:** per-frame masks from video propagation can be converted to per-frame point samples and then fused in SuGaR (temporal fusion or multi-view triangulation) to improve geometry stability and coverage.
 
 References and resources
 
 - **Segment Anything Model (official):** https://github.com/facebookresearch/segment-anything
 - **Example community projects (search GitHub):** "Video-SAM", "VideoSAM", "sam-video" — these provide mask propagation implementations and GUI wrappers for temporal annotation.
-## SuGaR: Surface-Aligned Gaussian Splatting for Efficient 3D Mesh Reconstruction
+
+### SuGaR: Surface-Aligned Gaussian Splatting for Efficient 3D Mesh Reconstruction
 
 **Reference:**  
 Guédon & Lepetit, *"SuGaR: Surface-Aligned Gaussian Splatting for Efficient 3D Mesh Reconstruction and High-Quality Mesh Rendering"*, CVPR 2024.  
