@@ -31,6 +31,18 @@ This document describes architecture, data flow, installation, configuration, us
 
 ---
 
+## Quick links
+
+- [Overview](#overview)
+- [Architecture & Data Flow](#architecture-and-data-flow)
+- [Data Formats & Layout](#data-formats-and-directory-layout)
+- [Installation](#installation)
+- [Pipeline Workflow](#pipeline-workflow-detailed)
+- [Commands & Examples](#commands--examples)
+- [Troubleshooting](#troubleshooting)
+
+---
+
 ## 2. Architecture and Data Flow
 
 High-level components:
@@ -49,22 +61,18 @@ images → preprocessing → SAM2 annotation → masks → point sampling → sp
 
 ## 3. Data Formats and Directory Layout
 
-Recommended repository layout (root = $SAM_FIT_SUGAR_PATH):
+Recommended repository layout (root = $SAMPLIFY_SUGAR_PATH):
 
-sam_fit_sugar/
+SAMplify_SuGaR/
 - data/
   - datasets/
     - <dataset_name>/
-      - images/            # .jpg images
+      - images/            # **.jpg** images
       - cameras/           # optional camera intrinsics / extrinsics (JSON, COLMAP files, etc.)
 - externals/
-  - SAM2-Docker/          # optional submodule or clone for SAM2 integration
-  - SuGaR/                # optional submodule or clone for SuGaR
-- scripts/
-  - run_pipeline.sh
-  - preprocess.py
-  - convert_masks_to_pointcloud.py
-  - sugar_reconstruct.py
+  - SAM2/                 # optional clone/submodule for SAM integration
+  - SuGaR/                # optional clone/submodule for SuGaR
+- scripts/                # glue scripts and CLI wrappers (e.g. annotation, conversion, reconstruction)
 - results/
   - <dataset_name>/
     - masks/
@@ -74,11 +82,13 @@ sam_fit_sugar/
 - docs/
   - README.md (this file)
 
-File conventions:
-- Images: .jpg (RGB). Filenames should be unique and zero-padded for ordering.
-- Masks: binary PNG or NumPy arrays (.npy) with same HxW as source image, values {0,1}.
-- Pointclouds: PLY or NumPy arrays with (x, y, z, r, g, b) columns.
-- Meshes: .ply or .obj with vertex normals and optional UVs.
+File conventions (brief):
+- **Images**: `.jpg` (RGB). Use unique, zero-padded filenames for ordering.
+- **Masks**: binary PNG or `.npy` arrays with same HxW as source image (`0` background, `1` foreground).
+- **Pointclouds**: PLY or `.npy` arrays `(x,y,z[,r,g,b])`.
+- **Meshes**: `.ply` or `.obj` with normals; UVs/textures optional.
+
+> Note: the `scripts/` directory contains _tool wrappers_. Avoid hard-coded references to non-existent filenames — adapt commands below to the tools available in your copy of the repo.
 
 ---
 
@@ -86,39 +96,32 @@ File conventions:
 
 ### Requirements
 
-- Linux (Ubuntu tested; other distros may work).
-- NVIDIA GPU with compatible drivers (recommended for SuGaR and SAM2 docker images).
-- Docker and NVIDIA Container Toolkit (nvidia-docker2) for GPU passthrough.
-- Python 3.8+ for local scripts and wrappers.
-- At least 8 GB RAM (16+ GB recommended), disk space for images and outputs.
+- **OS**: Linux (Ubuntu tested).
+- **GPU**: NVIDIA with compatible drivers (recommended).
+- **Containers**: Docker + NVIDIA Container Toolkit for GPU passthrough.
+- **Python**: 3.8+ (for local utilities).
+- **Hardware**: 8GB+ RAM (16GB recommended), disk for data.
 
-### Repositories
+### Clone the project
 
-Clone the project and optional externals:
+Replace `<repo-url>` with the URL for this repository and clone it to your machine:
 
 ```bash
-git clone https://gitlab.com/ilsp-xanthi-medialab/textailes/wp4/t4.5/sam_fit_sugar.git $SAM_FIT_SUGAR_PATH
-cd $SAM_FIT_SUGAR_PATH
-# Optional: clone helper projects
-git clone https://github.com/peasant98/SAM2-Docker.git externals/SAM2-Docker
-git clone https://github.com/Anttwo/SuGaR.git externals/SuGaR
+git clone <repo-url> $SAMPLIFY_SUGAR_PATH
+cd $SAMPLIFY_SUGAR_PATH
 ```
 
-### Python dependencies
+### Python environment (optional)
 
-Create virtual environment and install dependencies for local utilities (if provided):
+Create a virtualenv if you will run local scripts:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt  # if present
 ```
 
-Note: heavy compute steps run inside Docker containers by default. The local Python environment is primarily for glue scripts.
-
-### Docker + NVIDIA Container Toolkit
-
-Install NVIDIA Container Toolkit (Ubuntu example):
+### Docker & NVIDIA toolkit (Ubuntu example)
 
 ```bash
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
@@ -130,7 +133,7 @@ sudo apt-get install -y nvidia-docker2
 sudo systemctl restart docker
 ```
 
-Verify GPU availability inside Docker:
+Verify GPU inside a container:
 
 ```bash
 docker run --rm --gpus all nvidia/cuda:12.1-base nvidia-smi
