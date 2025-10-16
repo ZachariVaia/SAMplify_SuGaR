@@ -104,7 +104,7 @@ This will execute the **SAM2** and **SuGaR** pipelines for the specified dataset
 This project uses the SAM2 and SuGaR frameworks for 3D reconstruction of images, generating high-quality models with background removal. By clicking on significant points in an image, the SAM2 model generates a mask that isolates the object of interest.
 
 ## Workflow
-
+## Mask Generation
 ### 1. Image Loading and Point Annotation
 
 The process starts by loading an image. The user can click on the image to add points of interest:
@@ -113,16 +113,16 @@ The process starts by loading an image. The user can click on the image to add p
 - **Right-click** to add **negative points** (marked in **red**).
 
 The tool allows the user to select specific regions of the image, which will later be used to create a mask.
-![Example Image](readme_images/image_points_gui.png)
+![Example Image](readme_images/dress_gui.png)
 The tool allows the user to select specific regions of the image, which will later be used to create a mask.
 
 <p align="center">
-  <img src="readme_images/image_points_gui.png" alt="Example Image (GUI points)" width="640">
+  <img src="readme_images/dress_gui.png" alt="Example Image (GUI points)" width="640">
 </p>
 
 #### Example Image (before mask creation):
 <p align="center">
-  <img src="readme_images/image_1747083940.jpg" alt="Example Image (original)" width="640">
+  <img src="readme_images/dress_original_1760625683.jpg" alt="Example Image (original)" width="640">
 </p>
 
 ### 2. Generating the Mask with SAM2
@@ -131,7 +131,7 @@ Once enough points are added, the SAM2 model generates a **mask** that isolates 
 
 #### Mask Output:
 <p align="center">
-  <img src="readme_images/image_1747083940_mask.png" alt="Mask Output" width="640">
+  <img src="readme_images/dress_mask_1760625683.jpg" alt="Mask Output" width="640">
 </p>
 
 ### 3. Overlay of Mask on Image
@@ -139,22 +139,47 @@ Once enough points are added, the SAM2 model generates a **mask** that isolates 
 After the mask is created, it is applied to the original image, showing the object against a transparent or black background, as shown below:
 
 <p align="center">
-  <img src="readme_images/image_1747083940_overlay.png" alt="Image overlay" width="640">
+  <img src="readme_images/dress_masked_1760625683.jpg" alt="Image overlay" width="640">
 </p>
 
-#### Image with Mask:
-<p align="center">
-  <img src="readme_images/image_1747083940_mask_rgb.png" alt="Image with Mask, black background" width="640">
-</p>
 
 ### 4. Final Output
 
 The final result is an image where the object is isolated from the background, ready for further processing or 3D reconstruction.
 
-#### Final Image (Object Isolated):
+##  Structure-from-Motion with COLMAP
+
+The masked images are passed to **COLMAP** to estimate **camera poses** and generate a **sparse/dense point cloud**.
+
 <p align="center">
-  <img src="readme_images/image_1747083940_without_backround.png" alt="Final Image (Object Isolated)" width="640">
+  <img src="readme_images/colmap_dress.jpg" alt="Image overlay" width="640">
 </p>
+
+## Surface-Aligned Gaussian Splatting (SuGaR)
+
+The COLMAP reconstruction initializes a SuGaR model, producing a **3D Gaussian field**.
+
+<p align="center">
+  <img src="readme_images/gs3d.png" alt="Gaussian Splatting" width="650">
+</p>
+
+We can visualize both the **splat points** and the **ellipsoids** that represent their covariance:
+
+<p align="center">
+  <img src="readme_images/ellipsoids 3d gs.png" alt="Ellipsoids Visualization" width="650">
+</p>
+
+### Mesh Extraction and Texturing
+
+Finally, the SuGaR output is converted to a **Poisson mesh** and textured.
+
+**Textured Mesh Output:**
+
+<p align="center">
+  <img src="readme_images/sugarfine_3Dgs7000_densityestim02_sdfnorm02_level03_decim1000000_normalconsistency01_gaussperface1.png" alt="Textured Mesh" width="640">
+</p>
+
+
 
 ## Steps to Use
 
@@ -166,3 +191,4 @@ The final result is an image where the object is isolated from the background, r
 
 For more details, check the documentation in the repository or the command line help.
 
+λ
