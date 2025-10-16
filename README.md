@@ -112,8 +112,7 @@ The process starts by loading an image. The user can click on the image to add p
 - **Left-click** to add **positive points** (marked in **green**).
 - **Right-click** to add **negative points** (marked in **red**).
 
-The tool allows the user to select specific regions of the image, which will later be used to create a mask.
-![Example Image](readme_images/dress_gui.png)
+
 The tool allows the user to select specific regions of the image, which will later be used to create a mask.
 
 <p align="center">
@@ -152,7 +151,7 @@ The final result is an image where the object is isolated from the background, r
 The masked images are passed to **COLMAP** to estimate **camera poses** and generate a **sparse/dense point cloud**.
 
 <p align="center">
-  <img src="readme_images/colmap_dress.jpg" alt="Image overlay" width="640">
+  <img src="readme_images/colmap_dress.png" alt="Image overlay" width="640">
 </p>
 
 ## Surface-Aligned Gaussian Splatting (SuGaR)
@@ -166,7 +165,7 @@ The COLMAP reconstruction initializes a SuGaR model, producing a **3D Gaussian f
 We can visualize both the **splat points** and the **ellipsoids** that represent their covariance:
 
 <p align="center">
-  <img src="readme_images/ellipsoids 3d gs.png" alt="Ellipsoids Visualization" width="650">
+  <img src="readme_images/ellipsoids_3d_gs.png" alt="Ellipsoids Visualization" width="650">
 </p>
 
 ### Mesh Extraction and Texturing
@@ -191,4 +190,3 @@ Finally, the SuGaR output is converted to a **Poisson mesh** and textured.
 
 For more details, check the documentation in the repository or the command line help.
 
-λ
