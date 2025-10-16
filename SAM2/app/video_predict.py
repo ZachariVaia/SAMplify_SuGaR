@@ -1,27 +1,46 @@
 import os, glob, json, numpy as np, torch, cv2
 from sam2.sam2_video_predictor import SAM2VideoPredictor
 
-# ===================== CONFIG via env =====================
-DATASET_NAME="${DATASET_NAME:-${1:-}}"
-INPUT = os.environ.get("INPUT", "/data/in/{DATASET_NAME}")
+# ===================== CONFIG via environment variables =====================
+DATASET_NAME = os.environ.get("DATASET_NAME", "").strip()
+
+# Default INPUT: /data/in/<DATASET_NAME> if provided, otherwise /data/in
+_default_input = f"/data/in/{DATASET_NAME}" if DATASET_NAME else "/data/in"
+INPUT = os.environ.get("INPUT", _default_input)
 OUT_ROOT = os.environ.get("OUT", "/data/out")
 BOX   = os.environ.get("BOX", "")
 GUI   = os.environ.get("GUI", "1")
 OBJ_ID = int(os.environ.get("OBJ_ID", "1"))
 FRAME_IDX = int(os.environ.get("FRAME_IDX", "0"))
 
-# Auto-index settings
-AUTO_INDEX   = os.environ.get("AUTO_INDEX", "1")          # "1" index frames if needed
-INDEX_SUFFIX = os.environ.get("INDEX_SUFFIX", "_indexed") # name for the indexed mirror
+# Auto-indexing options
+AUTO_INDEX   = os.environ.get("AUTO_INDEX", "1")           # "1" means index frames if needed
+INDEX_SUFFIX = os.environ.get("INDEX_SUFFIX", "_indexed")  # suffix for the indexed mirror folder
+
+# Silence mode (default: 1 → fully silent)
+QUIET = os.environ.get("QUIET", "1")  # set QUIET=0 to re-enable console output
 
 
+# ===================== SILENCE EVERYTHING =====================
+if QUIET == "1":
+    import sys, warnings
+    # Reduce verbosity from third-party libraries
+    os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    warnings.filterwarnings("ignore")
+    try:
+        sys.stdout = open(os.devnull, "w")
+        sys.stderr = open(os.devnull, "w")
+    except Exception:
+        pass  # Ignore if redirect fails
 
-# ===================== helpers =====================
+
+# ===================== Helper functions =====================
 def ensure_indexed(src_dir: str, suffix: str = "_indexed") -> str:
     """
     Create an indexed mirror of JPG frames:
-      src_dir/*.jpg -> dst_dir/000000.jpg, 000001.jpg, ...
-    Tries symlinks; falls back to copy if symlink fails.
+      src_dir/*.jpg → dst_dir/000000.jpg, 000001.jpg, ...
+    Tries to create symlinks; falls back to copy if symlink fails.
     If src_dir already looks indexed, just return it.
     """
     import shutil
@@ -35,8 +54,7 @@ def ensure_indexed(src_dir: str, suffix: str = "_indexed") -> str:
 
     names = [os.path.splitext(os.path.basename(f))[0] for f in files]
     if all(len(n) == 6 and n.isdigit() for n in names):
-        print(f">> {src_dir} already indexed; reusing.")
-        return src_dir
+        return src_dir  # Already indexed
 
     parent = os.path.dirname(os.path.abspath(src_dir.rstrip("/")))
     base   = os.path.basename(src_dir.rstrip("/"))
@@ -47,10 +65,8 @@ def ensure_indexed(src_dir: str, suffix: str = "_indexed") -> str:
     if len(existing) == len(files) and all(
         os.path.exists(os.path.join(dst_dir, f"{i:06d}.jpg")) for i in range(len(files))
     ):
-        print(f">> Found existing indexed set: {dst_dir} ({len(existing)} frames)")
         return dst_dir
 
-    print(f">> Indexing {len(files)} frames into {dst_dir}")
     for i, f in enumerate(files):
         new_path = os.path.join(dst_dir, f"{i:06d}.jpg")
         if os.path.exists(new_path):
@@ -78,6 +94,7 @@ def load_frame(frames_dir, frame_idx):
     return img_rgb, frames[frame_idx]
 
 def save_prompts_json(path, frame_idx, obj_id, points, labels, image_w, image_h, source_name):
+    """Save user prompts (points and labels) in JSON format."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     data = {
         "frame_idx": int(frame_idx),
@@ -90,9 +107,12 @@ def save_prompts_json(path, frame_idx, obj_id, points, labels, image_w, image_h,
     }
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
-    print(f">> Saved prompts: {path}")
 
 def try_matplotlib_picker(frames_dir, frame_idx, default_box=None):
+    """
+    Optional interactive GUI for selecting positive/negative points.
+    Left-click = positive (green), right-click = negative (red).
+    """
     try:
         import matplotlib
         if "agg" in matplotlib.get_backend().lower():
@@ -104,8 +124,7 @@ def try_matplotlib_picker(frames_dir, frame_idx, default_box=None):
                     pass
         import matplotlib.pyplot as plt
         import numpy as np
-    except Exception as e:
-        print(">> Matplotlib GUI unavailable, skipping picker:", e)
+    except Exception:
         return None, None
 
     img_rgb, src_path = load_frame(frames_dir, frame_idx)
@@ -113,7 +132,7 @@ def try_matplotlib_picker(frames_dir, frame_idx, default_box=None):
 
     fig, ax = plt.subplots(figsize=(10, 8))
     ax.imshow(img_rgb)
-    ax.set_title("Click points: left=POS(green), right=NEG(red)\nKeys: u=undo, Enter=save, q=quit")
+    ax.set_title("Click points: left=POS, right=NEG | u=undo, Enter=save, q=quit")
     ax.axis("on")
 
     points, labels = [], []
@@ -130,10 +149,6 @@ def try_matplotlib_picker(frames_dir, frame_idx, default_box=None):
         L = np.array(labels, dtype=int) if labels else np.empty((0,), dtype=int)
         pos_scatter.set_offsets(P[L == 1] if len(P) and (L == 1).any() else np.empty((0, 2)))
         neg_scatter.set_offsets(P[L == 0] if len(P) and (L == 0).any() else np.empty((0, 2)))
-        ax.set_title(
-            f"Click points: left=POS(green), right=NEG(red)\n"
-            f"Keys: u=undo, Enter=save, q=quit  | points={len(points)}"
-        )
         fig.canvas.draw_idle()
 
     def on_click(ev):
@@ -168,6 +183,7 @@ def try_matplotlib_picker(frames_dir, frame_idx, default_box=None):
     return np.asarray(points, np.float32), np.asarray(labels, np.int32)
 
 def to_u8_mask(x):
+    """Convert a mask (tensor or array) to 0–255 uint8 image."""
     if isinstance(x, torch.Tensor):
         x = x.detach().cpu().squeeze()
         if x.is_floating_point():
@@ -181,11 +197,12 @@ def to_u8_mask(x):
     return x * 255
 
 def save_color_cutout(orig_img_path: str, mask_u8: np.ndarray, out_path: str):
+    """Apply binary mask to original image and save the color cutout."""
     img = cv2.imread(orig_img_path, cv2.IMREAD_COLOR)
     if img is None:
         raise FileNotFoundError(orig_img_path)
 
-    # ensure mask is single-channel 0/255 and same size as image
+    # Ensure mask is 0/255 and same size as image
     m = mask_u8
     if m.ndim == 3:
         m = m[..., 0]
@@ -193,47 +210,36 @@ def save_color_cutout(orig_img_path: str, mask_u8: np.ndarray, out_path: str):
         m = cv2.resize(m, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
     _, m = cv2.threshold(m, 127, 255, cv2.THRESH_BINARY)
 
-    # keep original pixels where mask==255, else black
+    # Keep original pixels where mask == 255, otherwise black
     cutout = cv2.bitwise_and(img, img, mask=m)
 
-    # save as JPG
     cv2.imwrite(out_path, cutout)
 
 
-# ===================== main =====================
-# 1) If INPUT is a dir and AUTO_INDEX=1, create/choose indexed mirror
+# ===================== Main pipeline =====================
+# 1) Index frames if needed
 if os.path.isdir(INPUT) and AUTO_INDEX == "1":
     INPUT = ensure_indexed(INPUT, INDEX_SUFFIX)
 
-# 2) Derive OUT_DIR based on (possibly updated) INPUT
+# 2) Define output directories
 inp_base = os.path.basename(INPUT.rstrip("/"))
 out_name = inp_base if os.path.isdir(INPUT) else os.path.splitext(inp_base)[0]
 OUT_DIR = os.path.join(OUT_ROOT, out_name)
 os.makedirs(OUT_DIR, exist_ok=True)
-
-# 3) Per-input JSON path
 PROMPTS_JSON = os.path.join(OUT_DIR, "prompts.json")
-
-# NEW: folder for color cutouts (original colors where mask is white)
 OUT_MASKED_DIR = os.path.join(OUT_ROOT, f"{out_name}_masked")
 os.makedirs(OUT_MASKED_DIR, exist_ok=True)
 
-# 4) Validate frames exist & build original-name map
+# 3) Validate frames and map original names
 if os.path.isdir(INPUT):
     frame_paths = list_frames(INPUT)
     if not frame_paths:
         raise FileNotFoundError(f"No .jpg frames found in {INPUT}")
-    # Map: frame index -> original basename (resolve symlink/copy back to source name)
-    idx_to_orig_name = []
-    for p in frame_paths:
-        orig = os.path.realpath(p)              # follows symlink; for copies it is the copy path
-        orig_base = os.path.basename(orig)      # e.g. image_1756838098.jpg
-        idx_to_orig_name.append(orig_base)
+    idx_to_orig_name = [os.path.basename(os.path.realpath(p)) for p in frame_paths]
 else:
-    frame_paths = []
-    idx_to_orig_name = []
+    frame_paths, idx_to_orig_name = [], []
 
-# 5) Parse BOX (optional)
+# 4) Parse optional BOX
 box = None
 if BOX:
     try:
@@ -242,8 +248,8 @@ if BOX:
     except Exception:
         box = None
 
-# 6) Load prompts.json or open picker
-points = None; labels = None
+# 5) Load prompts or open GUI picker
+points = labels = None
 if os.path.isfile(PROMPTS_JSON):
     with open(PROMPTS_JSON, "r") as f:
         J = json.load(f)
@@ -251,9 +257,7 @@ if os.path.isfile(PROMPTS_JSON):
     labels = np.array(J.get("labels", []), dtype=np.int32)
     FRAME_IDX = int(J.get("frame_idx", FRAME_IDX))
     OBJ_ID    = int(J.get("obj_id", OBJ_ID))
-    print(f">> Loaded prompts from {PROMPTS_JSON}: {len(points)} points")
 elif GUI == "1" and os.path.isdir(INPUT):
-    print(">> Opening Matplotlib picker on first frame...")
     pts, labs = try_matplotlib_picker(INPUT, FRAME_IDX, default_box=box)
     if pts is not None and labs is not None:
         img0, src_path = load_frame(INPUT, FRAME_IDX)
@@ -261,13 +265,12 @@ elif GUI == "1" and os.path.isdir(INPUT):
         save_prompts_json(PROMPTS_JSON, FRAME_IDX, OBJ_ID, pts, labs, w, h, os.path.basename(src_path))
         points, labels = pts, labs
 
-# 7) Fallback if no points
+# 6) Default fallback points
 if points is None or labels is None or len(points) == 0:
     if box is not None:
         cx, cy = (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
         points = np.asarray([[cx, cy]], np.float32)
         labels = np.asarray([1], np.int32)
-        print(">> No GUI/JSON points. Using BOX center as a single positive point.")
     else:
         if os.path.isdir(INPUT) and frame_paths:
             img0_bgr = cv2.imread(frame_paths[FRAME_IDX])
@@ -276,63 +279,44 @@ if points is None or labels is None or len(points) == 0:
             h, w = 1080, 1920
         points = np.asarray([[w // 2, h // 2]], np.float32)
         labels = np.asarray([1], np.int32)
-        print(">> No GUI/JSON/BOX. Using image center as a single positive point.")
 
-# 8) Run SAM2
+# 7) Run SAM2 segmentation
 pred = SAM2VideoPredictor.from_pretrained("facebook/sam2-hiera-large").to("cuda")
 use_bf16 = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
 dtype = torch.bfloat16 if use_bf16 else torch.float16
 
 with torch.inference_mode(), torch.autocast("cuda", dtype=dtype):
     state = pred.init_state(INPUT)
-
-    # keyword args for points/labels; positional for frame & obj
     frame_idx, obj_ids, masks = pred.add_new_points_or_box(
         state, FRAME_IDX, OBJ_ID, points=points, labels=labels
     )
 
-    # ----- save mask & color cutout for the prompted frame -----
+    # Save first-frame mask and cutout
     base_name = idx_to_orig_name[frame_idx] if idx_to_orig_name else f"{frame_idx:06d}.jpg"
     stem, _ = os.path.splitext(base_name)
     single_obj = len(obj_ids) == 1
 
     for k, oid in enumerate(obj_ids):
         out_name = f"{stem}.jpg" if single_obj else f"{stem}_obj{oid}.jpg"
-
-        # save mask (JPG)
         mask_path = os.path.join(OUT_DIR, out_name)
-        mask_u8   = to_u8_mask(masks[k])
+        mask_u8 = to_u8_mask(masks[k])
         cv2.imwrite(mask_path, mask_u8)
 
-        # save color cutout (JPG) into <dataset>_masked/
         cutout_path = os.path.join(OUT_MASKED_DIR, out_name)
-        orig_img_path = os.path.join(os.path.dirname(os.path.realpath(frame_paths[frame_idx])),
-                                    os.path.basename(os.path.realpath(frame_paths[frame_idx])))
+        orig_img_path = os.path.realpath(frame_paths[frame_idx])
         save_color_cutout(orig_img_path, mask_u8, cutout_path)
 
-    # ----- propagate through rest frames -----
+    # Propagate through the rest of the video
     for frame_idx, obj_ids, masks in pred.propagate_in_video(state):
         base_name = idx_to_orig_name[frame_idx] if idx_to_orig_name else f"{frame_idx:06d}.jpg"
         stem, _ = os.path.splitext(base_name)
         single_obj = len(obj_ids) == 1
-
-        # original image (resolved from symlink)
         orig_img_path = os.path.realpath(frame_paths[frame_idx])
 
         for k, oid in enumerate(obj_ids):
             out_name = f"{stem}.jpg" if single_obj else f"{stem}_obj{oid}.jpg"
-
             mask_path = os.path.join(OUT_DIR, out_name)
-            mask_u8   = to_u8_mask(masks[k])
+            mask_u8 = to_u8_mask(masks[k])
             cv2.imwrite(mask_path, mask_u8)
-
             cutout_path = os.path.join(OUT_MASKED_DIR, out_name)
             save_color_cutout(orig_img_path, mask_u8, cutout_path)
-
-
-
-
-
-#  docker run -it --gpus all   -v "$PWD:/workspace"   -v "$PWD/data/input:/data/in"   -v "$PWD/data/output:/data/out"   -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix   -e INPUT="/data/in/dress"   -e OUT="/data/out"   -e GUI="1" -e FRAME_IDX="0" -e OBJ_ID="1"   sam2:local   bash -lc 'python3 /workspace/app/video_predict.py'
-#  docker run -it --gpus all   -v "$PWD:/workspace"   -v "$PWD/data/input:/data/in"   -v "$PWD/data/output:/data/out"   -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix   -e INPUT="/data/in/vazo"   -e OUT="/data/out"   -e GUI="1" -e FRAME_IDX="0" -e OBJ_ID="1"   sam2:local   bash -lc 'python3 /workspace/app/video_predict.py'
-# docker run -it --gpus all   -v "$PWD:/workspace"   -v "$PWD/data/input:/data/in"   -v "$PWD/data/output:/data/out"   -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix   -e INPUT="/data/in/vazo"   -e OUT="/data/out"   -e GUI="1" -e FRAME_IDX="0" -e OBJ_ID="1"   sam2:local   bash -lc 'python3 /workspace/app/video_predict.py'

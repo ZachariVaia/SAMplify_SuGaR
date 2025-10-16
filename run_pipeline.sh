@@ -25,20 +25,21 @@ OUT_MNT_CONT="/data/out"
 INPUT_SUBDIR="${INPUT_SUBDIR:-$DATASET_NAME}"    # override with INPUT_SUBDIR=foo if you like
 INPUT_CONT="$IN_MNT_CONT/$INPUT_SUBDIR"          # what we pass to the container as INPUT
 
-# ====== LOGGING (to file + console) ======
+# ====== LOGGING (SILENT: only to file, nothing on terminal) ======
 LOGDIR="$SAMplify_SuGaR_PATH/logs"
 mkdir -p "$LOGDIR"
 LOGFILE="$LOGDIR/${DATASET_NAME}_$(date +%Y%m%d_%H%M%S).log"
 
-# keep original fds
-exec 3>&1 4>&2
-restore_fds() { exec 1>&3 2>&4; }
-on_error() { restore_fds; echo "STATUS: ERROR" >&2; echo "LOG: $LOGFILE" >&2; exit 1; }
-trap on_error ERR
-trap restore_fds EXIT
+# Send ALL stdout+stderr ONLY to the logfile
+exec 1>>"$LOGFILE" 2>&1
 
-# tee to console AND file
-exec > >(tee -a "$LOGFILE") 2>&1
+on_error() {
+  echo "STATUS: ERROR"
+  echo "LOG: $LOGFILE"
+  exit 1
+}
+trap on_error ERR
+# (No restore of FDs on EXIT; remains silent)
 
 echo "======================================"
 echo " SAM2 stage runner"
@@ -50,7 +51,6 @@ echo " Host OUT:         $OUT_MNT_HOST"
 echo " Container INPUT:  $INPUT_CONT"
 echo " Log:              $LOGFILE"
 echo "======================================"
-
 
 # ====== SANITY CHECKS ======
 [[ -d "$SAM2_PATH" ]]   || { echo "SAM2 path not found: $SAM2_PATH"; exit 1; }
@@ -99,7 +99,8 @@ sudo chown -R "$USER:$USER" "$IN" "$OUT"
 chmod -R u+rwX "$IN" "$OUT"
 mkdir -p "$IN/$DATASET_NAME" "$OUT"
 
-docker run --rm -it --gpus all \
+# NOTE: removed -it to avoid attaching TTY; stays silent
+docker run --rm --gpus all \
   --user "$(id -u):$(id -g)" \
   -v "$PWD:/workspace" \
   -v "$PWD/data/input:/data/in" \
@@ -120,15 +121,14 @@ else
   echo "[*] run_colmap.sh not found in $SAMplify_SuGaR_PATH (skipping copy)"
 fi
 cd "$COLMAP_OUT_PATH"
- 
- 
+
 sudo chown -R "$USER:$USER" "$COLMAP_OUT_PATH/input"
 chmod -R u+rwX,g+rwX "$COLMAP_OUT_PATH/input"
 
 sudo install -d -m 775 -o "$USER" -g "$USER" \
   "$COLMAP_OUT_PATH/input/$DATASET_NAME" \
   "$COLMAP_OUT_PATH/input/${DATASET_NAME}_indexed"
- 
+
 # ---- paths ----
 IMAGES_SRC="$SAM2_PATH/data/input/${DATASET_NAME}"
 MASKS_SRC="$SAM2_PATH/data/output/${DATASET_NAME}_indexed"   
@@ -158,8 +158,6 @@ bash "$COLMAP_OUT_PATH/run_colmap.sh" \
   "$OUT_DST" \
   exhaustive
 
-
-
 # --- optionally stage helper files ---
 if [ -f "$SAMplify_SuGaR_PATH/run_sugar_pipeline_with_sam.sh" ]; then
   echo "[*] Copying run_sugar_pipeline_with_sam.sh to $SUGAR_PATH"
@@ -173,7 +171,7 @@ if [ -f "$SAMplify_SuGaR_PATH/Dockerfile_final" ]; then
   echo "[*] Copying Dockerfile to $SUGAR_PATH"
   cp -f "$SAMplify_SuGaR_PATH/Dockerfile_final" "$SUGAR_PATH"
   cp -f "$SAMplify_SuGaR_PATH/train.py" "$SUGAR_PATH/gaussian_splatting/"
- 
+  cp -f "$SAMplify_SuGaR_PATH/coarse_mesh.py" "$SUGAR_PATH/sugar_extractors/coarse_mesh.py"
 else
   echo "[*] Dockerfile not found in $SAMplify_SuGaR_PATH (skipping copy)"
   echo "[*] train.py not found in $SAMplify_SuGaR_PATH (skipping copy)"
@@ -186,10 +184,8 @@ DATASET_NAME="$DATASET_NAME" \
 SUGAR_PATH="$SUGAR_PATH" \
 SAMplify_SuGaR__PATH="$SAMplify_SuGaR_PATH"
 
-
-
 # Uncomment to run the sugar pipeline
 bash ./run_sugar_pipeline_with_sam.sh "$DATASET_NAME"
 
 echo "[*] Pipeline completed successfully!"
-echo "LOG: $LOGFILE" >&3
+echo "LOG: $LOGFILE"
