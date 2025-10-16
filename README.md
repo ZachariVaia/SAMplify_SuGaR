@@ -23,7 +23,7 @@ git submodule update --init --recursive
 After cloning, go to the project folder:
 
 ```bash
-cd samplify_sugar
+cd SAMplify_SuGaR
 ```
 
 
@@ -146,4 +146,3 @@ The final result is an image where the object is isolated from the background, r
 
 For more details, check the documentation in the repository or the command line help.
 
-=======

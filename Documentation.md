@@ -112,15 +112,7 @@ git clone <repo-url> $SAMPLIFY_SUGAR_PATH
 cd $SAMPLIFY_SUGAR_PATH
 ```
 
-### Python environment (optional)
 
-Create a virtualenv if you will run local scripts:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt  # if present
-```
 
 ### Docker & NVIDIA toolkit (Ubuntu example)
 
