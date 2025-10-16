@@ -240,16 +240,12 @@ This transforms the volumetric 3DGS representation into a **surface-aligned dist
 ### Loss Formulation
 The surface-alignment objective combines **orientation** and **distance** consistency:
 
-\[
-\mathcal{L}_{\text{surf}} =
-\lambda_{\text{align}} \, \| (n_i^\top v_i)^2 - 1 \|
-+ \lambda_{\text{dist}} \, \| d_i - \hat{d_i} \|
-\]
+**𝓛ₛᵤʳ𝒻 = λₐₗᵢgₙ · ‖ (nᵢᵀ vᵢ)² − 1 ‖ + λ_dᵢₛₜ · ‖ dᵢ − d̂ᵢ ‖**
 
 Where:
-- \( n_i \): local surface normal  
-- \( v_i \): Gaussian principal direction  
-- \( d_i \): distance of Gaussian center to target surface  
+- **nᵢ** — local surface normal  
+- **vᵢ** — Gaussian principal direction  
+- **dᵢ** — distance of Gaussian center to the target surface  
 
 These terms ensure that each Gaussian is **oriented and positioned** coherently along the visible surfaces.
 
