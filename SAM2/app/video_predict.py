@@ -20,11 +20,13 @@ INDEX_SUFFIX = os.environ.get("INDEX_SUFFIX", "_indexed")  # suffix for the inde
 # Silence mode (default: 1 → fully silent)
 QUIET = os.environ.get("QUIET", "1")  # set QUIET=0 to re-enable console output
 
+# Accepted image extensions (add more if needed)
+ACCEPT_EXTS = (".jpg", ".jpeg", ".png")
+
 
 # ===================== SILENCE EVERYTHING =====================
 if QUIET == "1":
     import sys, warnings
-    # Reduce verbosity from third-party libraries
     os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     warnings.filterwarnings("ignore")
@@ -32,43 +34,69 @@ if QUIET == "1":
         sys.stdout = open(os.devnull, "w")
         sys.stderr = open(os.devnull, "w")
     except Exception:
-        pass  # Ignore if redirect fails
+        pass  # best effort
 
 
 # ===================== Helper functions =====================
+def _gather_frames(dir_path: str):
+    """Return sorted list of absolute paths for accepted image files (case-insensitive)."""
+    files = []
+    for ext in ACCEPT_EXTS:
+        # case-insensitive search by collecting both lower/upper variants
+        pattern_lower = os.path.join(dir_path, f"*{ext}")
+        pattern_upper = os.path.join(dir_path, f"*{ext.upper()}")
+        files.extend(glob.glob(pattern_lower))
+        files.extend(glob.glob(pattern_upper))
+    return sorted(set(os.path.abspath(p) for p in files))
+
+def list_frames(frames_dir):
+    return _gather_frames(frames_dir)
+
+def _is_indexed_name(path: str) -> bool:
+    """Check if basename without extension is exactly 6 digits (000000, 000001, ...)."""
+    name = os.path.splitext(os.path.basename(path))[0]
+    return len(name) == 6 and name.isdigit()
+
 def ensure_indexed(src_dir: str, suffix: str = "_indexed") -> str:
     """
-    Create an indexed mirror of JPG frames:
-      src_dir/*.jpg → dst_dir/000000.jpg, 000001.jpg, ...
-    Tries to create symlinks; falls back to copy if symlink fails.
-    If src_dir already looks indexed, just return it.
+    Create an indexed mirror of frames while preserving original extensions:
+      /src_dir/*.{jpg,jpeg,png} → /src_dir_indexed/000000.<ext>, 000001.<ext>, ...
+    Tries symlinks; falls back to copy if symlink fails.
+    If src_dir already looks indexed (all names 6 digits), just return it.
     """
     import shutil
 
     if not os.path.isdir(src_dir):
         raise NotADirectoryError(f"ensure_indexed: {src_dir} is not a directory")
 
-    files = sorted(glob.glob(os.path.join(src_dir, "*.jpg")))
+    files = list_frames(src_dir)
     if not files:
-        raise FileNotFoundError(f"No .jpg frames found in {src_dir}")
+        raise FileNotFoundError(f"No frames found in {src_dir} (accepted: {', '.join(ACCEPT_EXTS)})")
 
-    names = [os.path.splitext(os.path.basename(f))[0] for f in files]
-    if all(len(n) == 6 and n.isdigit() for n in names):
-        return src_dir  # Already indexed
+    # If everything already looks indexed, reuse as-is
+    if all(_is_indexed_name(p) for p in files):
+        return src_dir
 
     parent = os.path.dirname(os.path.abspath(src_dir.rstrip("/")))
     base   = os.path.basename(src_dir.rstrip("/"))
     dst_dir = os.path.join(parent, base + suffix)
     os.makedirs(dst_dir, exist_ok=True)
 
-    existing = sorted(glob.glob(os.path.join(dst_dir, "*.jpg")))
+    # Recreate mirror if counts mismatch
+    existing = _gather_frames(dst_dir)
     if len(existing) == len(files) and all(
-        os.path.exists(os.path.join(dst_dir, f"{i:06d}.jpg")) for i in range(len(files))
+        os.path.exists(os.path.join(dst_dir, f"{i:06d}{os.path.splitext(files[i])[1].lower()}"))
+        for i in range(len(files))
     ):
         return dst_dir
 
+    # Build fresh mirror, preserving each file's extension
     for i, f in enumerate(files):
-        new_path = os.path.join(dst_dir, f"{i:06d}.jpg")
+        ext = os.path.splitext(f)[1].lower()
+        if ext not in ACCEPT_EXTS:
+            # Skip unknown ext just in case
+            continue
+        new_path = os.path.join(dst_dir, f"{i:06d}{ext}")
         if os.path.exists(new_path):
             continue
         try:
@@ -77,17 +105,13 @@ def ensure_indexed(src_dir: str, suffix: str = "_indexed") -> str:
             shutil.copy2(f, new_path)
     return dst_dir
 
-
-def list_frames(frames_dir):
-    return sorted(glob.glob(os.path.join(frames_dir, "*.jpg")))
-
 def load_frame(frames_dir, frame_idx):
     frames = list_frames(frames_dir)
     if not frames:
-        raise FileNotFoundError(f"No .jpg frames found in {frames_dir}")
+        raise FileNotFoundError(f"No frames found in {frames_dir} (accepted: {', '.join(ACCEPT_EXTS)})")
     if frame_idx < 0 or frame_idx >= len(frames):
         raise IndexError(f"frame_idx {frame_idx} out of range [0,{len(frames)-1}]")
-    img_bgr = cv2.imread(frames[frame_idx])
+    img_bgr = cv2.imread(frames[frame_idx], cv2.IMREAD_COLOR)
     if img_bgr is None:
         raise FileNotFoundError(frames[frame_idx])
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
@@ -212,7 +236,6 @@ def save_color_cutout(orig_img_path: str, mask_u8: np.ndarray, out_path: str):
 
     # Keep original pixels where mask == 255, otherwise black
     cutout = cv2.bitwise_and(img, img, mask=m)
-
     cv2.imwrite(out_path, cutout)
 
 
@@ -230,14 +253,15 @@ PROMPTS_JSON = os.path.join(OUT_DIR, "prompts.json")
 OUT_MASKED_DIR = os.path.join(OUT_ROOT, f"{out_name}_masked")
 os.makedirs(OUT_MASKED_DIR, exist_ok=True)
 
-# 3) Validate frames and map original names
+# 3) Validate frames and map original names + extensions
 if os.path.isdir(INPUT):
     frame_paths = list_frames(INPUT)
     if not frame_paths:
-        raise FileNotFoundError(f"No .jpg frames found in {INPUT}")
+        raise FileNotFoundError(f"No frames found in {INPUT} (accepted: {', '.join(ACCEPT_EXTS)})")
     idx_to_orig_name = [os.path.basename(os.path.realpath(p)) for p in frame_paths]
+    idx_to_orig_ext  = [os.path.splitext(n)[1] for n in idx_to_orig_name]  # includes dot, preserves case
 else:
-    frame_paths, idx_to_orig_name = [], []
+    frame_paths, idx_to_orig_name, idx_to_orig_ext = [], [], []
 
 # 4) Parse optional BOX
 box = None
@@ -273,7 +297,7 @@ if points is None or labels is None or len(points) == 0:
         labels = np.asarray([1], np.int32)
     else:
         if os.path.isdir(INPUT) and frame_paths:
-            img0_bgr = cv2.imread(frame_paths[FRAME_IDX])
+            img0_bgr = cv2.imread(frame_paths[FRAME_IDX], cv2.IMREAD_COLOR)
             h, w = img0_bgr.shape[:2]
         else:
             h, w = 1080, 1920
@@ -287,36 +311,49 @@ dtype = torch.bfloat16 if use_bf16 else torch.float16
 
 with torch.inference_mode(), torch.autocast("cuda", dtype=dtype):
     state = pred.init_state(INPUT)
+
+    # First frame with prompts
     frame_idx, obj_ids, masks = pred.add_new_points_or_box(
         state, FRAME_IDX, OBJ_ID, points=points, labels=labels
     )
 
-    # Save first-frame mask and cutout
-    base_name = idx_to_orig_name[frame_idx] if idx_to_orig_name else f"{frame_idx:06d}.jpg"
-    stem, _ = os.path.splitext(base_name)
+    # Save mask & cutout for the prompted frame, preserving original extension
+    base_name = idx_to_orig_name[frame_idx] if idx_to_orig_name else f"{frame_idx:06d}"
+    stem, orig_ext = os.path.splitext(base_name)
     single_obj = len(obj_ids) == 1
+    orig_img_path = os.path.realpath(frame_paths[frame_idx]) if frame_paths else None
+    ext_for_save = orig_ext if orig_ext else ".jpg"  # fallback
 
     for k, oid in enumerate(obj_ids):
-        out_name = f"{stem}.jpg" if single_obj else f"{stem}_obj{oid}.jpg"
+        suffix = "" if single_obj else f"_obj{oid}"
+        out_name = f"{stem}{suffix}{ext_for_save}"
+
+        # binary mask saved with original extension
         mask_path = os.path.join(OUT_DIR, out_name)
-        mask_u8 = to_u8_mask(masks[k])
+        mask_u8   = to_u8_mask(masks[k])
         cv2.imwrite(mask_path, mask_u8)
 
-        cutout_path = os.path.join(OUT_MASKED_DIR, out_name)
-        orig_img_path = os.path.realpath(frame_paths[frame_idx])
-        save_color_cutout(orig_img_path, mask_u8, cutout_path)
-
-    # Propagate through the rest of the video
-    for frame_idx, obj_ids, masks in pred.propagate_in_video(state):
-        base_name = idx_to_orig_name[frame_idx] if idx_to_orig_name else f"{frame_idx:06d}.jpg"
-        stem, _ = os.path.splitext(base_name)
-        single_obj = len(obj_ids) == 1
-        orig_img_path = os.path.realpath(frame_paths[frame_idx])
-
-        for k, oid in enumerate(obj_ids):
-            out_name = f"{stem}.jpg" if single_obj else f"{stem}_obj{oid}.jpg"
-            mask_path = os.path.join(OUT_DIR, out_name)
-            mask_u8 = to_u8_mask(masks[k])
-            cv2.imwrite(mask_path, mask_u8)
+        # color cutout saved with original extension
+        if orig_img_path:
             cutout_path = os.path.join(OUT_MASKED_DIR, out_name)
             save_color_cutout(orig_img_path, mask_u8, cutout_path)
+
+    # Propagate to remaining frames
+    for frame_idx, obj_ids, masks in pred.propagate_in_video(state):
+        base_name = idx_to_orig_name[frame_idx] if idx_to_orig_name else f"{frame_idx:06d}"
+        stem, orig_ext = os.path.splitext(base_name)
+        single_obj = len(obj_ids) == 1
+        orig_img_path = os.path.realpath(frame_paths[frame_idx]) if frame_paths else None
+        ext_for_save = orig_ext if orig_ext else ".jpg"
+
+        for k, oid in enumerate(obj_ids):
+            suffix = "" if single_obj else f"_obj{oid}"
+            out_name = f"{stem}{suffix}{ext_for_save}"
+
+            mask_path = os.path.join(OUT_DIR, out_name)
+            mask_u8   = to_u8_mask(masks[k])
+            cv2.imwrite(mask_path, mask_u8)
+
+            if orig_img_path:
+                cutout_path = os.path.join(OUT_MASKED_DIR, out_name)
+                save_color_cutout(orig_img_path, mask_u8, cutout_path)
