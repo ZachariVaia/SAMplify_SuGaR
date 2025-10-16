@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # SAMplify\_SuGaR
 
 "SAMplify\_SuGaR" is a system that processes images to generate 3D meshes without backgrounds. By combining **SAM2** (Surface-Aligned Mesh) and **SUGAR** (Surface-Aligned Gaussian Splatting), it aligns surfaces and creates efficient 3D models, perfect for applications requiring clean, background-free reconstructions.
@@ -148,6 +147,3 @@ The final result is an image where the object is isolated from the background, r
 For more details, check the documentation in the repository or the command line help.
 
 =======
-# SAMplify_SuGaR
-SAMplify_SuGaR" is a system that processes images to generate 3D meshes without backgrounds. By combining SAM2 (Surface-Aligned Mesh) and SUGAR (Surface-Aligned Gaussian Splatting), it aligns surfaces and creates efficient 3D models, perfect for applications requiring clean, background-free reconstructions.
->>>>>>> 34902e1690ffe24f5078c68cb0dcff9efebd6cf3
