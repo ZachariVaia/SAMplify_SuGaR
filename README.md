@@ -5,7 +5,7 @@
 
 
 <p align="center">
-  <img src="readme_images/pipeline_SAMplify_SuGaR.png" alt="Pipeline Image" width="700"/>
+  <img src="readme_images/pipeline_SAMplify_SuGaR.png" alt="Pipeline Image" width="600"/>
 </p>
 
 ## Quick Start
@@ -114,31 +114,47 @@ The process starts by loading an image. The user can click on the image to add p
 
 The tool allows the user to select specific regions of the image, which will later be used to create a mask.
 ![Example Image](readme_images/image_points_gui.png)
+The tool allows the user to select specific regions of the image, which will later be used to create a mask.
+
+<p align="center">
+  <img src="readme_images/image_points_gui.png" alt="Example Image (GUI points)" width="640">
+</p>
 
 #### Example Image (before mask creation):
-![Example Image](readme_images/image_1747083940.jpg)
+<p align="center">
+  <img src="readme_images/image_1747083940.jpg" alt="Example Image (original)" width="640">
+</p>
 
 ### 2. Generating the Mask with SAM2
 
 Once enough points are added, the SAM2 model generates a **mask** that isolates the object of interest. The mask is a binary image that shows the identified area.
 
 #### Mask Output:
-![Mask Output](readme_images/image_1747083940_mask.png)
+<p align="center">
+  <img src="readme_images/image_1747083940_mask.png" alt="Mask Output" width="640">
+</p>
 
 ### 3. Overlay of Mask on Image
 
 After the mask is created, it is applied to the original image, showing the object against a transparent or black background, as shown below:
-![Image overlay](readme_images/image_1747083940_overlay.png)
+
+<p align="center">
+  <img src="readme_images/image_1747083940_overlay.png" alt="Image overlay" width="640">
+</p>
 
 #### Image with Mask:
-![Image with Mask, black backround](readme_images/image_1747083940_mask_rgb.png)
+<p align="center">
+  <img src="readme_images/image_1747083940_mask_rgb.png" alt="Image with Mask, black background" width="640">
+</p>
 
 ### 4. Final Output
 
 The final result is an image where the object is isolated from the background, ready for further processing or 3D reconstruction.
 
 #### Final Image (Object Isolated):
-![Final Image](readme_images/image_1747083940_without_backround.png)
+<p align="center">
+  <img src="readme_images/image_1747083940_without_backround.png" alt="Final Image (Object Isolated)" width="640">
+</p>
 
 ## Steps to Use
 
