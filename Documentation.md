@@ -72,6 +72,7 @@ SAMplify_SuGaR/
 - externals/
   - SAM2/                 # optional clone/submodule for SAM integration
   - SuGaR/                # optional clone/submodule for SuGaR
+- colmap/                # COLMAP wrapper for SfM and dense stereo (included in this repo)
 - scripts/                # glue scripts and CLI wrappers (e.g. annotation, conversion, reconstruction)
 - results/
   - <dataset_name>/
@@ -165,7 +166,7 @@ export DOCKER_IMAGE_SUGAR="ant_two/sugar:latest"
 
 ## 6. Pipeline Workflow (detailed)
 
-1. Prepare dataset: place images under data/datasets/<dataset_name>/images/.
+1. Prepare dataset: place images under data/datasets/<dataset_name>/.
 2. Preprocess images (optional): resizing, color normalization, or lens correction.
 3. Annotate using SAM2 UI (interactive): add positive and negative points. Save masks to results/<dataset>/masks/.
    - Positive points: indicate foreground (object).
@@ -310,7 +311,7 @@ Problem: Output mesh has holes or disconnected components
 
 Planned improvements:
 - Semi-automated point suggestion: use object detectors to propose initial positive/negative points.
-- Native multi-view integration: add SfM (COLMAP) wrapper to automatically compute camera poses and dense stereo.
+- Native multi-view integration: **IMPLEMENTED** — a COLMAP wrapper is included in the repository under the `colmap/` subfolder. Use this wrapper to compute camera poses, run sparse and dense reconstruction, and export camera parameters / depth maps for downstream mask→pointcloud conversion.
 - Texture baking and PBR export workflow.
 - Adaptive splat subsampling and streaming reconstruction for very large scenes.
 
