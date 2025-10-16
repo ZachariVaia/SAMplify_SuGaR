@@ -45,11 +45,11 @@ This document describes architecture, data flow, installation, configuration, us
 
 High-level components:
 
-- Input: photographic images (single or multi-view).
-- SAM2: interactive segmentation (user-provided positive/negative points) → binary masks.
-- Mask-to-pointcloud: convert mask pixels into 3D samples (single-view heuristics or multi-view triangulation if camera poses available).
-- SuGaR: represent points as Gaussian splats, aggregate density field, extract surface (Poisson / Marching Cubes).
-- Postprocessing: smoothing, decimation, normals, optional texture baking.
+- **Input:** photographic images (single or multi-view).
+- **SAM2:** interactive segmentation (user-provided positive/negative points) → binary masks.
+- **Mask-to-pointcloud:** convert mask pixels into 3D samples (single-view heuristics or multi-view triangulation if camera poses available).
+- **SuGaR:** represent points as Gaussian splats, aggregate density field, extract surface (Poisson / Marching Cubes).
+- **Postprocessing:** smoothing, decimation, normals, optional texture baking.
 
 Data flow diagram (logical):
 
