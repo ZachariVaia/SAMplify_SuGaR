@@ -202,14 +202,15 @@ While standard 3DGS optimizes unstructured volumetric Gaussians, SuGaR adds geom
 
 ---
 
-### 🧩 Core Concept
+### Core Concept
 Each Gaussian splat \( G_i \) is defined by its center \( \mu_i \), covariance \( \Sigma_i \), color \( c_i \), and opacity \( \alpha_i \):
 
 \[
-G_i(x) = \alpha_i \exp \left( -\frac{1}{2}(x - \mu_i)^T \Sigma_i^{-1} (x - \mu_i) \right)
+G_i(x) = \alpha_i \exp \left( -\frac{1}{2}(x - \mu_i)^{T} \Sigma_i^{-1} (x - \mu_i) \right)
 \]
 
-The **total density field** is:
+The total density field is:
+
 \[
 \rho(x) = \sum_i G_i(x)
 \]
@@ -235,11 +236,13 @@ This transforms the volumetric 3DGS representation into a **surface-aligned dist
 
 ---
 
-### 🧠 Loss Formulation
-The surface alignment objective combines **orientation** and **distance** consistency:
+### Loss Formulation
+The surface-alignment objective combines **orientation** and **distance** consistency:
 
 \[
-\mathcal{L}_{surf} = \lambda_{align} \| (n_i^\top v_i)^2 - 1 \| + \lambda_{dist} \| d_i - \hat{d_i} \|
+\mathcal{L}_{\text{surf}} =
+\lambda_{\text{align}} \, \| (n_i^\top v_i)^2 - 1 \|
++ \lambda_{\text{dist}} \, \| d_i - \hat{d_i} \|
 \]
 
 Where:
@@ -252,10 +255,10 @@ These terms ensure that each Gaussian is **oriented and positioned** coherently 
 ---
 
 ### 🎯 Advantages
-- ✅ **Fast mesh extraction:** Poisson reconstruction completes in minutes  
-- ✅ **High-quality geometry:** Smooth, watertight, and accurate surfaces  
-- ✅ **Hybrid representation:** Editable mesh + Gaussian rendering  
-- ✅ **Physically consistent normals and albedo**
+- **Fast mesh extraction:** Poisson reconstruction completes in minutes  
+- **High-quality geometry:** Smooth, watertight, and accurate surfaces  
+- **Hybrid representation:** Editable mesh + Gaussian rendering  
+- **Physically consistent normals and albedo**
 
 ---
 
